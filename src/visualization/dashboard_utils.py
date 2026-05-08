@@ -499,7 +499,9 @@ def _build_context_prompt(snapshot: Dict[str, Any], question: str) -> str:
         "when there are fewer than 3 complaint candidates, do not call the result a recurring "
         "theme or broad product problem. Frame it as available evidence or a case-level "
         "signal. If the user asks for more examples than exist, say how many are available. "
-        "If the user asks for advice, give concise checks that match the evidence level.\n\n"
+        "If the user asks for advice, give concise checks that match the evidence level. "
+        "Answer naturally and conversationally. Do not force a fixed heading template unless "
+        "the user explicitly asks for one.\n\n"
         f"Scope: {snapshot['scope_label']}\n"
         f"Total reviews: {snapshot['total_reviews']}\n"
         f"High-value reviews: {snapshot['high_value_reviews']}\n"
@@ -513,7 +515,6 @@ def _build_context_prompt(snapshot: Dict[str, Any], question: str) -> str:
         f"Top complaint keywords: {keyword_text}\n"
         "Representative reviews:\n"
         f"{review_bullets or '- No representative reviews available.'}\n\n"
-        "When useful, structure the answer with: key finding, evidence, recommended action.\n"
         f"User question: {question}"
     )
 
@@ -556,6 +557,11 @@ def answer_chat_question(
 
     if snapshot["total_reviews"] == 0:
         return "There is no data in the current scope yet. Try switching the category or product."
+
+    if use_ark_llm:
+        llm_answer = _answer_with_ark(snapshot, question)
+        if llm_answer:
+            return llm_answer
 
     lowered = question.lower()
     compact_question = re.sub(r"[^\w\u4e00-\u9fff]+", " ", lowered).strip()
@@ -646,11 +652,6 @@ def answer_chat_question(
 
     if any(keyword in lowered for keyword in QUESTION_KEYWORDS["action"]):
         return _action_answer(snapshot, scope_label)
-
-    if use_ark_llm:
-        llm_answer = _answer_with_ark(snapshot, question)
-        if llm_answer:
-            return llm_answer
 
     retrieved = _retrieve_reviews_for_question(question, get_complaint_candidates(dataframe))
     if not retrieved.empty:
